@@ -20,11 +20,17 @@ export interface TimelineItem {
   relatedIds: number[]
   status: NodeStatus
   energy: number
-  orbit?: 0 | 1 | 2   // 0 = inner, 1 = mid, 2 = outer; auto-assigned if omitted
+  orbit?: 0 | 1 | 2
+  /** Reading node: list of books with progress */
+  books?: { title: string; pct: number }[]
+  /** Contact node: external links */
+  links?: { label: string; url: string }[]
 }
 
 interface Props {
   timelineData: TimelineItem[]
+  centerName?: string
+  centerTagline?: string
 }
 
 type AugmentedItem = TimelineItem & { orbit: 0 | 1 | 2; indexInOrbit: number }
@@ -33,11 +39,11 @@ type AugmentedItem = TimelineItem & { orbit: 0 | 1 | 2; indexInOrbit: number }
    CONSTANTS
 ══════════════════════════════════════════════════════════ */
 
-const ORBIT_RADII   = [155, 265, 375] as const   // px at scale=1
-const ORBIT_SPEEDS  = [28,   50,  76] as const   // seconds per revolution
+const ORBIT_RADII  = [160, 275, 390] as const   // px at scale=1
+const ORBIT_SPEEDS = [30,   52,  80] as const   // seconds per revolution
 
-const NODE_SIZE    = 48   // uniform px
-const CENTER_SIZE  = 112  // px
+const NODE_SIZE   = 48    // px
+const CENTER_SIZE = 130   // px — large enough for a two-line name
 
 const STATUS_COLOR: Record<NodeStatus, string> = {
   completed:     "text-emerald-500",
@@ -63,9 +69,9 @@ function getOrbitRadius(level: 0 | 1 | 2, scale: number): number {
   return ORBIT_RADII[level] * scale
 }
 
-/** Opacity-only depth — no blur, no scale tricks. */
+/** Opacity-only depth — no blur, no scale variation. */
 function getDepthOpacity(angleDeg: number): number {
-  return 0.40 + 0.60 * ((Math.sin((angleDeg * Math.PI) / 180) + 1) / 2)
+  return 0.42 + 0.58 * ((Math.sin((angleDeg * Math.PI) / 180) + 1) / 2)
 }
 
 function getDepthZIndex(angleDeg: number): number {
@@ -76,7 +82,11 @@ function getDepthZIndex(angleDeg: number): number {
    MAIN COMPONENT
 ══════════════════════════════════════════════════════════ */
 
-export default function RadialOrbitalTimeline({ timelineData }: Props) {
+export default function RadialOrbitalTimeline({
+  timelineData,
+  centerName = "Salman Fiqi",
+  centerTagline = "backend · infra",
+}: Props) {
 
   /* augment each item with orbit level + index within that orbit */
   const augmented = React.useMemo<AugmentedItem[]>(() => {
@@ -95,7 +105,13 @@ export default function RadialOrbitalTimeline({ timelineData }: Props) {
     return c
   }, [augmented])
 
-  /* deduplicated graph edges for connection lines */
+  /* id → title lookup for related-node labels */
+  const titleById = React.useMemo(
+    () => Object.fromEntries(timelineData.map((i) => [i.id, i.title])),
+    [timelineData]
+  )
+
+  /* deduplicated graph edges */
   const edges = React.useMemo<[number, number][]>(() => {
     const seen = new Set<string>()
     const result: [number, number][] = []
@@ -113,10 +129,11 @@ export default function RadialOrbitalTimeline({ timelineData }: Props) {
   const [energyLevels, setEnergyLevels] = useState<Record<number, number>>(
     () => Object.fromEntries(timelineData.map((item) => [item.id, item.energy]))
   )
-  const [expandedId, setExpandedId] = useState<number | null>(null)
-  const [hoveredId,  setHoveredId]  = useState<number | null>(null)
-  const [isPaused,   setIsPaused]   = useState(false)
-  const [scale,      setScale]      = useState(1)
+  const [expandedId,   setExpandedId]   = useState<number | null>(null)
+  const [expandedNodeX, setExpandedNodeX] = useState<number>(0)
+  const [hoveredId,    setHoveredId]    = useState<number | null>(null)
+  const [isPaused,     setIsPaused]     = useState(false)
+  const [scale,        setScale]        = useState(1)
 
   const rafRef      = useRef<number | null>(null)
   const lastTimeRef = useRef<number>(0)
@@ -156,7 +173,7 @@ export default function RadialOrbitalTimeline({ timelineData }: Props) {
         timelineData.forEach((item) => {
           next[item.id] = item.id === expandedId
             ? Math.min(100, prev[item.id] + 1.2 * delta)
-            : Math.max(10,  prev[item.id] - 0.07 * delta)
+            : Math.max(10,  prev[item.id] - 0.06 * delta)
         })
         return next
       })
@@ -170,14 +187,16 @@ export default function RadialOrbitalTimeline({ timelineData }: Props) {
   }, [animate])
 
   /* ── interaction ── */
-  const handleNodeClick = (id: number) => {
-    setExpandedId((prev) => (prev === id ? null : id))
+  const handleNodeClick = (id: number, nodeX: number) => {
+    const isTogglingOff = expandedId === id
+    setExpandedId(isTogglingOff ? null : id)
+    if (!isTogglingOff) setExpandedNodeX(nodeX)
     setIsPaused(true)
     if (resumeTimer.current) clearTimeout(resumeTimer.current)
     resumeTimer.current = setTimeout(() => {
       lastTimeRef.current = 0
       setIsPaused(false)
-    }, 9000)
+    }, 10000)
   }
 
   const handleClose = () => {
@@ -192,7 +211,7 @@ export default function RadialOrbitalTimeline({ timelineData }: Props) {
   const relatedIds   = new Set(expandedItem?.relatedIds ?? [])
   const hoveredItem  = augmented.find((i) => i.id === hoveredId) ?? null
 
-  /* ── per-node positions (6 trig ops per frame, no memo needed) ── */
+  /* ── per-node positions ── */
   const positions = augmented.map((item) => {
     const count  = nodesPerOrbit[item.orbit] || 1
     const angle  = (orbitAngles[item.orbit] + (360 / count) * item.indexInOrbit) % 360
@@ -202,47 +221,38 @@ export default function RadialOrbitalTimeline({ timelineData }: Props) {
   })
   const posById = Object.fromEntries(positions.map((p) => [p.id, p]))
 
-  const canvasSize = (getOrbitRadius(2, scale) + 100) * 2
+  const canvasSize = (getOrbitRadius(2, scale) + 108) * 2
   const half       = canvasSize / 2
 
   /* ── render ── */
   return (
     <div className="relative flex items-center justify-center w-full min-h-screen overflow-hidden bg-black">
 
-      {/* subtle dot-grid — gives engineering-tool feel without decoration */}
+      {/* dot grid — very faint, gives "engineering tool" texture */}
       <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px)",
+        backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px)",
         backgroundSize: "28px 28px",
-      }} />
-
-      {/* very faint center radial to guide the eye */}
-      <div className="absolute inset-0 pointer-events-none" style={{
-        background: "radial-gradient(ellipse 55% 55% at 50% 50%, rgba(255,255,255,0.015) 0%, transparent 100%)",
       }} />
 
       {/* ── canvas ── */}
       <div className="relative flex-shrink-0" style={{ width: canvasSize, height: canvasSize }}>
 
-        {/* orbit rings — extremely faint structural lines */}
-        {ORBIT_RADII.map((baseR, level) => {
-          const r = baseR * scale
-          return (
-            <div key={level}
-              className="absolute rounded-full pointer-events-none"
-              style={{
-                width: r * 2, height: r * 2,
-                left: "50%", top: "50%",
-                transform: "translate(-50%,-50%)",
-                border: "1px solid rgba(255,255,255,0.05)",
-              }}
-            />
-          )
-        })}
+        {/* orbit rings */}
+        {ORBIT_RADII.map((baseR, level) => (
+          <div key={level}
+            className="absolute rounded-full pointer-events-none"
+            style={{
+              width: baseR * scale * 2,
+              height: baseR * scale * 2,
+              left: "50%", top: "50%",
+              transform: "translate(-50%,-50%)",
+              border: "1px solid rgba(255,255,255,0.05)",
+            }}
+          />
+        ))}
 
-        {/* graph edges — always-on faint connection lines between related nodes */}
-        <svg className="absolute pointer-events-none"
-          style={{ inset: 0, width: "100%", height: "100%" }}
-        >
+        {/* graph edges */}
+        <svg className="absolute pointer-events-none" style={{ inset: 0, width: "100%", height: "100%" }}>
           {edges.map(([aId, bId]) => {
             const a = posById[aId]
             const b = posById[bId]
@@ -255,7 +265,7 @@ export default function RadialOrbitalTimeline({ timelineData }: Props) {
                 x2={half + b.x} y2={half + b.y}
                 stroke="white"
                 strokeWidth={isHighlit ? 1 : 0.5}
-                strokeOpacity={isHighlit ? 0.18 : 0.07}
+                strokeOpacity={isHighlit ? 0.20 : 0.07}
                 strokeDasharray={isHighlit ? "none" : "3 5"}
                 strokeLinecap="round"
               />
@@ -269,6 +279,8 @@ export default function RadialOrbitalTimeline({ timelineData }: Props) {
             isPaused={isPaused}
             onToggle={() => { setIsPaused((p) => !p); lastTimeRef.current = 0 }}
             activeItem={expandedItem ?? hoveredItem}
+            centerName={centerName}
+            centerTagline={centerTagline}
             scale={scale}
           />
         </div>
@@ -300,7 +312,7 @@ export default function RadialOrbitalTimeline({ timelineData }: Props) {
                 isHovered={isHovered}
                 energy={energy}
                 nodeSize={NODE_SIZE * Math.max(0.70, scale)}
-                onClick={() => handleNodeClick(item.id)}
+                onClick={() => handleNodeClick(item.id, pos.x)}
                 onMouseEnter={() => setHoveredId(item.id)}
                 onMouseLeave={() => setHoveredId(null)}
               />
@@ -309,9 +321,14 @@ export default function RadialOrbitalTimeline({ timelineData }: Props) {
         })}
       </div>
 
-      {/* details panel — fixed, never overlaps orbit */}
+      {/* details panel — smart left/right placement to avoid covering nodes */}
       {expandedItem && (
-        <DetailsPanel item={expandedItem} onClose={handleClose} />
+        <DetailsPanel
+          item={expandedItem}
+          nodeX={expandedNodeX}
+          titleById={titleById}
+          onClose={handleClose}
+        />
       )}
 
       {/* energy meter */}
@@ -325,11 +342,13 @@ export default function RadialOrbitalTimeline({ timelineData }: Props) {
 ══════════════════════════════════════════════════════════ */
 
 function CenterOrb({
-  isPaused, onToggle, activeItem, scale,
+  isPaused, onToggle, activeItem, centerName, centerTagline, scale,
 }: {
   isPaused: boolean
   onToggle: () => void
   activeItem: { title: string; category: string } | null
+  centerName: string
+  centerTagline: string
   scale: number
 }) {
   const size = Math.round(CENTER_SIZE * Math.max(0.65, scale))
@@ -339,38 +358,35 @@ function CenterOrb({
       style={{ width: size, height: size }}
       aria-label="Toggle orbit"
     >
-      {/* outer border */}
-      <div className="absolute inset-0 rounded-full border border-white/12 group-hover:border-white/22 transition-colors duration-200" />
-      {/* inner ring */}
-      <div className="absolute rounded-full border border-white/6"
-        style={{ inset: Math.round(size * 0.12) }}
+      <div className="absolute inset-0 rounded-full border border-white/10 group-hover:border-white/20 transition-colors duration-200" />
+      <div className="absolute rounded-full border border-white/[0.05]"
+        style={{ inset: Math.round(size * 0.11) }}
       />
-      {/* face */}
-      <div className="absolute inset-0 rounded-full bg-black flex flex-col items-center justify-center gap-0.5">
+      <div className="absolute inset-0 rounded-full bg-black flex flex-col items-center justify-center gap-0.5 px-3">
         {activeItem ? (
           <>
-            <span className="text-white/85 font-medium text-center leading-tight px-3"
-              style={{ fontSize: Math.max(9, Math.round(size * 0.11)) }}
+            <span className="text-white/80 font-medium text-center leading-tight w-full truncate"
+              style={{ fontSize: Math.max(9, Math.round(size * 0.105)) }}
             >
               {activeItem.title}
             </span>
-            <span className="text-white/28 font-mono text-center"
-              style={{ fontSize: Math.max(7, Math.round(size * 0.072)) }}
+            <span className="text-white/25 font-mono text-center"
+              style={{ fontSize: Math.max(7, Math.round(size * 0.068)) }}
             >
               {activeItem.category}
             </span>
           </>
         ) : (
           <>
-            <span className="text-white/75 font-mono font-medium tracking-widest"
-              style={{ fontSize: Math.max(10, Math.round(size * 0.135)) }}
+            <span className="text-white/70 font-medium text-center leading-tight w-full text-center"
+              style={{ fontSize: Math.max(10, Math.round(size * 0.115)) }}
             >
-              SF
+              {centerName}
             </span>
-            <span className="text-white/22 font-mono tracking-wider"
-              style={{ fontSize: Math.max(7, Math.round(size * 0.072)) }}
+            <span className="text-white/22 font-mono tracking-wide text-center"
+              style={{ fontSize: Math.max(7, Math.round(size * 0.068)) }}
             >
-              {isPaused ? "PAUSED" : "SYS"}
+              {isPaused ? "paused" : centerTagline}
             </span>
           </>
         )}
@@ -402,24 +418,22 @@ function OrbitalNode({
   const Icon = item.icon
 
   const borderColor =
-    isExpanded  ? "rgba(255,255,255,0.60)" :
-    isRelated   ? "rgba(255,255,255,0.30)" :
-    isHovered   ? "rgba(255,255,255,0.35)" :
-                  "rgba(255,255,255,0.16)"
+    isExpanded ? "rgba(255,255,255,0.65)" :
+    isRelated  ? "rgba(255,255,255,0.28)" :
+    isHovered  ? "rgba(255,255,255,0.38)" :
+                 "rgba(255,255,255,0.15)"
 
-  const nodeScale =
-    isExpanded ? 1.14 :
-    isHovered  ? 1.06 : 1
+  const nodeScale = isExpanded ? 1.14 : isHovered ? 1.06 : 1
 
   return (
     <div className="relative flex items-center justify-center"
       style={{ width: nodeSize, height: nodeSize }}
     >
-      {/* energy bar — thin line above node */}
+      {/* focus bar — thin line above node */}
       <div className="absolute pointer-events-none"
         style={{
           bottom: "100%", marginBottom: 6,
-          width: nodeSize * 0.72, height: 2,
+          width: nodeSize * 0.70, height: 2,
           left: "50%", transform: "translateX(-50%)",
           borderRadius: 1,
           background: "rgba(255,255,255,0.06)",
@@ -429,12 +443,12 @@ function OrbitalNode({
         <div style={{
           width: `${energy}%`, height: "100%",
           borderRadius: 1,
-          background: isExpanded ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.22)",
+          background: isExpanded ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.20)",
           transition: "width 0.5s ease, background 0.25s ease",
         }} />
       </div>
 
-      {/* node */}
+      {/* node button */}
       <button
         onClick={onClick}
         onMouseEnter={onMouseEnter}
@@ -445,27 +459,26 @@ function OrbitalNode({
           transform: `scale(${nodeScale})`,
           transition: "transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease",
           boxShadow: isExpanded
-            ? "0 0 0 1px rgba(255,255,255,0.06), 0 4px 20px rgba(0,0,0,0.7)"
+            ? "0 0 0 1px rgba(255,255,255,0.06), 0 4px 18px rgba(0,0,0,0.7)"
             : isHovered
             ? "0 2px 10px rgba(0,0,0,0.5)"
             : "none",
         }}
         aria-label={item.title}
       >
-        {/* inner ring — the nested circle */}
+        {/* inner ring */}
         <div className="absolute rounded-full pointer-events-none"
           style={{
             inset: Math.round(nodeSize * 0.20),
-            border: `1px solid ${isExpanded ? "rgba(255,255,255,0.20)" : "rgba(255,255,255,0.08)"}`,
+            border: `1px solid ${isExpanded ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.07)"}`,
             transition: "border-color 0.22s ease",
           }}
         />
         {/* icon */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <Icon
-            size={Math.round(nodeSize * 0.30)}
+          <Icon size={Math.round(nodeSize * 0.30)}
             style={{
-              color: isExpanded ? "rgba(255,255,255,0.90)" : "rgba(255,255,255,0.45)",
+              color: isExpanded ? "rgba(255,255,255,0.88)" : "rgba(255,255,255,0.42)",
               transition: "color 0.22s ease",
             }}
           />
@@ -476,10 +489,9 @@ function OrbitalNode({
       <span
         className="absolute whitespace-nowrap font-mono select-none pointer-events-none transition-colors duration-200"
         style={{
-          top: "100%",
-          marginTop: 7,
-          fontSize: Math.max(9, Math.round(nodeSize * 0.21)),
-          color: isExpanded ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.25)",
+          top: "100%", marginTop: 7,
+          fontSize: Math.max(9, Math.round(nodeSize * 0.205)),
+          color: isExpanded ? "rgba(255,255,255,0.60)" : "rgba(255,255,255,0.22)",
         }}
       >
         {item.title}
@@ -490,38 +502,54 @@ function OrbitalNode({
 
 /* ══════════════════════════════════════════════════════════
    DETAILS PANEL
+   — placed left if the selected node is in the right half,
+     right if it's in the left half, to avoid covering nodes
 ══════════════════════════════════════════════════════════ */
 
-function DetailsPanel({ item, onClose }: { item: TimelineItem; onClose: () => void }) {
+function DetailsPanel({
+  item, nodeX, titleById, onClose,
+}: {
+  item: TimelineItem
+  nodeX: number
+  titleById: Record<number, string>
+  onClose: () => void
+}) {
   const Icon = item.icon
+  /* node on right side → card goes left; node on left → card goes right */
+  const cardOnLeft = nodeX > 60
+
   return (
     <div className={cn(
       "fixed z-40 pointer-events-auto",
+      /* mobile: full-width bar at bottom */
       "bottom-4 left-3 right-3",
-      "sm:left-auto sm:right-5 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 sm:w-72",
+      /* sm+: side panel, vertically centered */
+      cardOnLeft
+        ? "sm:left-5 sm:right-auto sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 sm:w-72"
+        : "sm:right-5 sm:left-auto sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 sm:w-72",
     )}>
-      <div className="rounded-xl border border-white/10 bg-black/80 backdrop-blur-sm p-5">
+      <div className="rounded-xl border border-white/10 bg-black/90 backdrop-blur-sm p-5 max-h-[80vh] overflow-y-auto">
 
         {/* header */}
-        <div className="flex items-start justify-between mb-5">
+        <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full border border-white/15 bg-black flex items-center justify-center flex-shrink-0">
-              <Icon size={14} className="text-white/55" />
+            <div className="w-8 h-8 rounded-full border border-white/12 bg-black flex items-center justify-center flex-shrink-0">
+              <Icon size={14} className="text-white/50" />
             </div>
             <div>
-              <h3 className="text-white/88 font-medium text-sm leading-tight">{item.title}</h3>
-              <span className="text-white/28 text-xs font-mono mt-0.5 block">{item.category}</span>
+              <h3 className="text-white/85 font-medium text-sm leading-tight">{item.title}</h3>
+              <span className="text-white/25 text-xs font-mono mt-0.5 block">{item.category}</span>
             </div>
           </div>
           <button onClick={onClose}
-            className="text-white/20 hover:text-white/55 transition-colors duration-150 text-base leading-none font-mono mt-0.5"
+            className="text-white/20 hover:text-white/55 transition-colors duration-150 text-base leading-none font-mono mt-0.5 ml-2"
             aria-label="Close"
           >×</button>
         </div>
 
-        {/* meta row */}
+        {/* date + status */}
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-white/28 text-xs font-mono border border-white/10 rounded px-2 py-0.5">
+          <span className="text-white/25 text-xs font-mono border border-white/8 rounded px-2 py-0.5">
             {item.date}
           </span>
           <span className={cn("text-xs font-mono", STATUS_COLOR[item.status])}>
@@ -529,39 +557,81 @@ function DetailsPanel({ item, onClose }: { item: TimelineItem; onClose: () => vo
           </span>
         </div>
 
-        <div className="h-px bg-white/6 mb-4" />
+        <div className="h-px bg-white/[0.06] mb-4" />
 
         {/* description */}
-        <p className="text-white/52 text-sm leading-relaxed mb-5">{item.content}</p>
+        <p className="text-white/50 text-sm leading-relaxed mb-4">{item.content}</p>
 
-        {/* energy bar */}
-        <div className="mb-5">
+        {/* books (Reading node) */}
+        {item.books && (
+          <>
+            <div className="h-px bg-white/[0.06] mb-4" />
+            <span className="text-white/20 text-xs font-mono mb-3 block">currently reading</span>
+            <div className="space-y-3">
+              {item.books.map((book) => (
+                <div key={book.title}>
+                  <div className="flex justify-between items-baseline mb-1.5">
+                    <span className="text-white/45 text-xs leading-snug pr-3">{book.title}</span>
+                    <span className="text-white/22 text-xs font-mono flex-shrink-0">{book.pct}%</span>
+                  </div>
+                  <div className="h-px bg-white/8">
+                    <div className="h-full bg-white/28 transition-all duration-500"
+                      style={{ width: `${book.pct}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* links (Contact node) */}
+        {item.links && (
+          <>
+            <div className="h-px bg-white/[0.06] mb-4" />
+            <div className="space-y-0.5">
+              {item.links.map((link) => (
+                <a key={link.label} href={link.url}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center justify-between py-1.5 text-xs font-mono text-white/38 hover:text-white/70 transition-colors duration-150 group"
+                >
+                  <span>{link.label}</span>
+                  <span className="text-white/18 group-hover:text-white/45 transition-colors">↗</span>
+                </a>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* focus bar */}
+        <div className="mt-4">
+          <div className="h-px bg-white/[0.06] mb-4" />
           <div className="flex justify-between items-center mb-2">
-            <span className="text-white/25 text-xs font-mono">energy</span>
-            <span className="text-white/38 text-xs font-mono">{item.energy}%</span>
+            <span className="text-white/20 text-xs font-mono">focus</span>
+            <span className="text-white/32 text-xs font-mono">{item.energy}%</span>
           </div>
           <div className="h-px bg-white/8 overflow-hidden rounded">
-            <div className="h-full bg-white/40 rounded transition-all duration-500"
+            <div className="h-full bg-white/38 rounded transition-all duration-500"
               style={{ width: `${item.energy}%` }}
             />
           </div>
         </div>
 
-        {/* related nodes */}
+        {/* related nodes — shown by title, not #id */}
         {item.relatedIds.length > 0 && (
-          <>
-            <div className="h-px bg-white/6 mb-4" />
-            <span className="text-white/20 text-xs font-mono mb-2.5 block">related</span>
+          <div className="mt-4">
+            <div className="h-px bg-white/[0.06] mb-4" />
+            <span className="text-white/18 text-xs font-mono mb-2 block">related</span>
             <div className="flex gap-1.5 flex-wrap">
               {item.relatedIds.map((id) => (
                 <span key={id}
                   className="text-xs font-mono border border-white/8 text-white/28 rounded px-2 py-0.5"
                 >
-                  #{id}
+                  {titleById[id] ?? `#${id}`}
                 </span>
               ))}
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -588,11 +658,11 @@ function EnergyMeter({
           <div key={item.id} className="flex flex-col items-center gap-1">
             <div className="w-px rounded-full transition-all duration-500"
               style={{
-                height: Math.max(4, energy * 0.30),
-                background: isActive ? "rgba(255,255,255,0.50)" : "rgba(255,255,255,0.16)",
+                height: Math.max(4, energy * 0.28),
+                background: isActive ? "rgba(255,255,255,0.48)" : "rgba(255,255,255,0.14)",
               }}
             />
-            <span className="font-mono" style={{ fontSize: 8, color: "rgba(255,255,255,0.14)" }}>
+            <span className="font-mono" style={{ fontSize: 8, color: "rgba(255,255,255,0.12)" }}>
               {item.title.slice(0, 3).toUpperCase()}
             </span>
           </div>
