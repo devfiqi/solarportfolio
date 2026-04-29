@@ -17,6 +17,9 @@ export const metadata: Metadata = {
   description: "Backend infrastructure · Distributed systems · Databases",
 };
 
+// Runs before hydration to avoid flash of wrong theme
+const themeScript = `(function(){var t=localStorage.getItem('portfolio-theme');if(t==='light')document.documentElement.classList.add('light');})();`
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,6 +30,9 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
