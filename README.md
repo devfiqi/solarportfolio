@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# solarportfolio
 
-## Getting Started
+Personal portfolio for [Salman Fiqi](https://linkedin.com/in/salmanfiqi) — an interactive
+orbital map of work, experience, leadership, and the way I think.
 
-First, run the development server:
+**Live:** [solarportfolio.vercel.app](https://solarportfolio.vercel.app)
+
+## Stack
+
+- Next.js 16 (App Router, Turbopack)
+- React 19
+- TypeScript
+- Tailwind CSS v4
+- Lucide icons
+- Deployed on Vercel
+
+## Local development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Other scripts:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build   # production build
+npm run start   # serve the production build
+npm run lint    # eslint
+```
 
-## Learn More
+## Project structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+app/
+  page.tsx              # all portfolio content lives here (timelineData)
+  layout.tsx
+  globals.css
+components/ui/
+  radial-orbital-timeline.tsx   # the orbital map component
+  card.tsx, button.tsx, badge.tsx
+lib/
+  utils.ts
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+To update the portfolio, edit `timelineData` and `PROJECTS` in [`app/page.tsx`](app/page.tsx).
+The orbital UI, animation, and command palette live in
+[`components/ui/radial-orbital-timeline.tsx`](components/ui/radial-orbital-timeline.tsx).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Keyboard shortcuts
 
-## Deploy on Vercel
+- `⌘K` / `Ctrl+K` — command palette
+- `/` — open command palette
+- `Esc` — close panel / palette
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploy
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Production deploys go to Vercel. Push to `main` triggers an auto-deploy via the Git
+integration. To deploy manually:
+
+```bash
+vercel --prod
+```
