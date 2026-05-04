@@ -132,7 +132,7 @@ function getDepthZIndex(angleDeg: number): number {
 export default function RadialOrbitalTimeline({
   timelineData,
   centerName = "Salman Fiqi",
-  centerTagline = "backend · distributed systems · infra",
+  centerTagline = "engineer · builder · leader",
 }: Props) {
 
   /* ── augment items with orbit index ── */
@@ -223,14 +223,17 @@ export default function RadialOrbitalTimeline({
   }, [])
 
   const commands = useMemo(() => [
-    { label: "Open Projects",      action: () => { setExpandedId(4); setCmdOpen(false) } },
-    { label: "Open Experience",    action: () => { setExpandedId(5); setCmdOpen(false) } },
-    { label: "Open Reading",       action: () => { setExpandedId(7); setCmdOpen(false) } },
-    { label: "Open Resume",        action: () => { window.open(RESUME_URL, "_blank"); setCmdOpen(false) } },
-    { label: "Open GitHub",        action: () => { window.open(GITHUB_URL, "_blank"); setCmdOpen(false) } },
-    { label: "Open LinkedIn",      action: () => { window.open(LINKEDIN_URL, "_blank"); setCmdOpen(false) } },
-    { label: "Toggle Light Mode",  action: () => { toggleTheme(); setCmdOpen(false) } },
-    { label: "Toggle System View", action: () => { toggleView(); setCmdOpen(false) } },
+    { label: "Open Selected Work",     action: () => { setExpandedId(1); setCmdOpen(false) } },
+    { label: "Open Where I've Worked", action: () => { setExpandedId(2); setCmdOpen(false) } },
+    { label: "Open How I Lead",        action: () => { setExpandedId(3); setCmdOpen(false) } },
+    { label: "Open How I Think",       action: () => { setExpandedId(4); setCmdOpen(false) } },
+    { label: "Open Currently",         action: () => { setExpandedId(5); setCmdOpen(false) } },
+    { label: "Open Get in Touch",      action: () => { setExpandedId(6); setCmdOpen(false) } },
+    { label: "Open Resume",            action: () => { window.open(RESUME_URL, "_blank"); setCmdOpen(false) } },
+    { label: "Open GitHub",            action: () => { window.open(GITHUB_URL, "_blank"); setCmdOpen(false) } },
+    { label: "Open LinkedIn",          action: () => { window.open(LINKEDIN_URL, "_blank"); setCmdOpen(false) } },
+    { label: "Toggle Light Mode",      action: () => { toggleTheme(); setCmdOpen(false) } },
+    { label: "Toggle System View",     action: () => { toggleView(); setCmdOpen(false) } },
   ], [toggleTheme, toggleView])
 
   const filteredCommands = useMemo(
