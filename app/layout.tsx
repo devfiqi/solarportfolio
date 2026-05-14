@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Salman Fiqi — Backend Engineer",
-  description: "Backend infrastructure · Distributed systems · Databases",
+  title: "Salman Fiqi — Software Engineer",
+  description:
+    "Distributed systems, data infrastructure, and AI-adjacent tooling — LinkedIn intern, ColorStack VP, builder.",
 };
 
 // Runs before hydration to avoid flash of wrong theme

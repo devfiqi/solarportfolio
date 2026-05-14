@@ -1,13 +1,31 @@
 @import "tailwindcss";
 
 :root {
-  --background: #000000;
-  --foreground: #ededed;
+  --background: #030303;
+  --foreground: #ececec;
+  --muted: rgba(236, 236, 236, 0.58);
+  --faint: rgba(236, 236, 236, 0.12);
+  --line: rgba(236, 236, 236, 0.1);
+  --surface: rgba(255, 255, 255, 0.035);
+  --surface-hover: rgba(255, 255, 255, 0.055);
+  --solar: #f59e0b;
+  --solar-bright: #fbbf24;
+  --solar-dim: rgba(245, 158, 11, 0.35);
+  --glow: rgba(245, 158, 11, 0.12);
 }
 
 .light {
-  --background: #ffffff;
-  --foreground: #111111;
+  --background: #fafafa;
+  --foreground: #0a0a0a;
+  --muted: rgba(10, 10, 10, 0.58);
+  --faint: rgba(10, 10, 10, 0.12);
+  --line: rgba(10, 10, 10, 0.1);
+  --surface: rgba(0, 0, 0, 0.04);
+  --surface-hover: rgba(0, 0, 0, 0.06);
+  --solar: #d97706;
+  --solar-bright: #ea580c;
+  --solar-dim: rgba(217, 119, 6, 0.35);
+  --glow: rgba(234, 88, 12, 0.1);
 }
 
 @theme inline {
@@ -21,9 +39,48 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans, Arial, Helvetica, sans-serif);
-  transition: background-color 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 input::placeholder {
   opacity: 0.38;
+}
+
+/* Subtle solar wash — static, no scroll-linked theatrics */
+.portfolio-aurora {
+  background:
+    radial-gradient(900px 520px at 18% -8%, var(--glow), transparent 62%),
+    radial-gradient(700px 480px at 88% 0%, rgba(249, 115, 22, 0.08), transparent 55%);
+}
+
+.portfolio-grid {
+  background-image: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--foreground) 5%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+}
+
+.text-solar-gradient {
+  background: linear-gradient(
+    115deg,
+    var(--foreground) 0%,
+    var(--foreground) 42%,
+    var(--solar-bright) 72%,
+    var(--solar) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
